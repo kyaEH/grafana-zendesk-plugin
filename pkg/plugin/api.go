@@ -31,22 +31,38 @@ func (a api) buildRequest(ctx context.Context, method string, url string) (*http
 }
 
 func (a api) FetchTickets(ctx context.Context, query backend.DataQuery) ([]apiTicket, error) {
+    if len(query.JSON) == 0 {
+        return []apiTicket{}, errors.New("invalid request")
+    }
 
-	if len(query.JSON) == 0 {
-		return []apiTicket{}, errors.New("invalid request")
-	}
+    q := apiQuery{}
+    err := json.Unmarshal(query.JSON, &q)
+    if err != nil {
+        return []apiTicket{}, fmt.Errorf("unmarshal: %w", err)
+    }
 
-	q := apiQuery{}
-	err := json.Unmarshal(query.JSON, &q)
-	if err != nil {
-		return []apiTicket{}, fmt.Errorf("unmarshal: %w", err)
-	}
+    var allTickets []apiTicket
+    page := 1
+    for {
+        p := url.Values{}
+        p.Add("query", q.QueryString)
+        p.Add("sort_by", "updated_at")
+        p.Add("page", fmt.Sprintf("%d", page))
 
-	p := url.Values{}
-	p.Add("query", q.QueryString)
-	p.Add("sort_by", "updated_at")
+        tickets, err := a.query(ctx, q, p)
+        if err != nil {
+            return nil, err
+        }
 
-	return a.query(ctx, q, p)
+        if len(tickets) == 0 {
+            break
+        }
+
+        allTickets = append(allTickets, tickets...)
+        page++
+    }
+
+    return allTickets, nil
 }
 
 func (a api) query(ctx context.Context, query apiQuery, params url.Values) ([]apiTicket, error) {
